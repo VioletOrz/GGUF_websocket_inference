@@ -1,4 +1,4 @@
-models/*
+models/*.gguf
 .history
 build
 *.exe
