@@ -1,0 +1,9 @@
+models/*
+.history
+build
+*.exe
+*.spec
+*.zip
+*__pycache__*
+dist
+.vscode
