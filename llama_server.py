@@ -17,23 +17,39 @@ def start_llama_server(model_path, llama_server_path, n_gpu_layers=-1, n_ctx=409
 
     CREATE_NO_WINDOW = 0x08000000
 
-    proc = subprocess.Popen(
-        cmd,
-        env=env,
-        # stdout=subprocess.PIPE,
-        # stderr=subprocess.STDOUT,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        creationflags=CREATE_NO_WINDOW,
-        text=True,
-        bufsize=1
-    )
+    debug = False
 
-    # def log_reader():
-    #     for line in proc.stdout:
-    #         print("[llama]", line.rstrip())
+    if debug:
+        proc = subprocess.Popen(
+            cmd,
+            env=env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            # stdout=subprocess.DEVNULL,
+            # stderr=subprocess.DEVNULL,
+            # creationflags=CREATE_NO_WINDOW,
+            text=True,
+            bufsize=1
+        )
+        def log_reader():
+            for line in proc.stdout:
+                print("[llama]", line.rstrip())
 
-    # threading.Thread(target=log_reader, daemon=True).start()
+        threading.Thread(target=log_reader, daemon=True).start()
+
+    else:
+        proc = subprocess.Popen(
+            cmd,
+            env=env,
+            # stdout=subprocess.PIPE,
+            # stderr=subprocess.STDOUT,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            creationflags=CREATE_NO_WINDOW,
+            text=True,
+            bufsize=1
+        )
+
     return proc
 
 

@@ -6,7 +6,7 @@ pip install -r requirements.txt
 
 # Windows
 
-if use cuda, you should download llama-server-cuda.exe, copy all dll file and llama-server.exe to ./llama/
+if use cuda, you should download llama-server-cuda.exe and cudaruntime dll, copy all dll file and llama-server.exe to ./llama/
 
 https://github.com/ggml-org/llama.cpp/releases?utm_source=chatgpt.com
 
