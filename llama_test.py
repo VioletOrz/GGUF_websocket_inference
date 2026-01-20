@@ -2,7 +2,7 @@ from llama_cpp import Llama
 
 llm = Llama(
     model_path="G:/models/Qwen3-0.6B/Qwen3-0.6B-full-nothink-260113-smix01/Qwen3-0.6B-full-nothink-260113-smix01-Q4_K_M.gguf",
-    n_ctx=2048,
+    n_ctx=1024,
     n_threads=4,
 )
 

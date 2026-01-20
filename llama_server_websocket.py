@@ -4,8 +4,13 @@ import websockets
 from llama_cpp import Llama
 import time
 import sys
+from llama_server import start_llama_server
+import requests
 
-llm = None   # 全局模型实例
+
+
+llm = None   
+proc = None
 
 def clean_response(prompt, response):
 
@@ -19,7 +24,7 @@ def clean_response(prompt, response):
     char_list = []
 
     for char in char_text:
-        if char.strip() != '':
+        if char.strip() != '' and char[0:4] == "姓名: ":
             char_list.append(char.split('姓名: ')[1].split(' ')[0])
 
     res_char_list = []
@@ -50,16 +55,39 @@ def clean_response(prompt, response):
 # -------------------------
 # 加载 / 重载模型
 # -------------------------
-def load_model(model_path, n_ctx, n_threads):
+def load_model(model_path, n_ctx, n_threads, use_gpu=False, **kwargs):
+    global proc
     global llm
-    print(f"[LLM] Loading model: {model_path}")
-    llm = Llama(
-        model_path=model_path,
-        n_ctx=n_ctx,
-        n_batch=512,
-        n_threads=n_threads,
-    )
-    print("[LLM] Model loaded")
+
+    if proc is not None:
+        print("[LLM] Shutdown llama server")
+        proc.terminate()
+        proc.wait()
+        proc = None
+    if llm is not None:
+        print("[LLM] Shutdown llama cpp")
+        llm.close()
+        llm = None
+        
+    if use_gpu == False:
+        print(f"[LLM] Loading model: {model_path}")
+        llm = Llama(
+            model_path=model_path,
+            n_ctx=n_ctx,
+            n_batch=512,
+            n_threads=n_threads,
+        )
+        print("[LLM] Model loaded")
+    else:
+        print(f"[LLM] Loading model - llama server: {model_path}")
+        llama_server_path = kwargs.get("llama_server_path", "./llama/llama-server.exe")
+        n_gpu_layers = kwargs.get("n_gpu_layers", -1)
+        # n_ctx = kwargs.get("n_ctx", 2048)
+        # n_threads = kwargs.get("n_threads", 4)
+        llama_port = kwargs.get("llama_port", 8849)
+        proc = start_llama_server(model_path, llama_server_path, n_gpu_layers=n_gpu_layers, n_ctx=n_ctx, n_threads=n_threads, port=llama_port)
+        time.sleep(2) # 等待异步模型加载
+        print("[LLM] Model loaded - llama server")
 
 
 # -------------------------
@@ -67,7 +95,9 @@ def load_model(model_path, n_ctx, n_threads):
 # -------------------------
 async def handle_ws(ws):
     global llm
-
+    global proc
+    use_gpu = None
+    llama_port = None
     async for msg in ws:
         try:
             req = json.loads(msg)
@@ -77,12 +107,17 @@ async def handle_ws(ws):
             # 1. 启动 / 重载模型
             # -------------------------
             if req_type == "load_model":
+
                 model_path = req["model_path"]
-                n_ctx = req.get("n_ctx", 4096)
+                n_ctx = req.get("n_ctx", 2048)
                 n_threads = req.get("n_threads", 4)
+                use_gpu = req.get("use_gpu", False)
 
-                load_model(model_path, n_ctx, n_threads)
+                llama_server_path = req.get("llama_server_path", "./llama/llama-server.exe")
+                n_gpu_layers = req.get("n_gpu_layers", -1)
+                llama_port = req.get("llama_port", 8849)
 
+                load_model(model_path, n_ctx, n_threads, use_gpu=use_gpu, llama_server_path=llama_server_path, n_gpu_layers=n_gpu_layers, llama_port=llama_port)
                 await ws.send(json.dumps({
                     "type": "load_model_ok",
                     "model_path": model_path
@@ -93,9 +128,15 @@ async def handle_ws(ws):
             # 2. 终止服务
             # -------------------------
             if req_type == "shutdown":
+
+                if proc is not None:
+                    proc.terminate()
+                    proc.wait()
+
                 await ws.send(json.dumps({
-                    "type": "shutdown_ok"
+                    "type": "shutdown_ok" 
                 }))
+
                 print("[LLM] Shutdown requested")
                 await ws.close()
                 sys.exit(0)
@@ -103,57 +144,58 @@ async def handle_ws(ws):
             # -------------------------
             # 3. 推理请求
             # -------------------------
-            if llm is None:
-                await ws.send(json.dumps({
-                    "type": "error",
-                    "message": "Model not loaded"
-                }))
-                continue
+            
+            if req_type == "infer":
 
-            messages = req["messages"]
-            max_tokens = req.get("max_tokens", 512)
-            temperature = req.get("temperature", 0.7)
-            stream = req.get("stream", False)
-            repeat_penalty = req.get("repeat_penalty", 1.0)
-            top_p = req.get("top_p", 0.95)
-            top_k = req.get("top_k", 40)
-            seed = req.get("seed", -1)
+                messages = req["messages"]
+                max_tokens = req.get("max_tokens", 512)
+                temperature = req.get("temperature", 0.7)
+                repeat_penalty = req.get("repeat_penalty", 1.0)
+                top_p = req.get("top_p", 0.95)
+                top_k = req.get("top_k", 40)
+                seed = req.get("seed", -1)
+                llama_port = req.get("llama_port", 8849)
 
-            st_time = time.time()
+                st_time = time.time()
 
-            if stream:
-                for out in llm.create_chat_completion(
-                    messages=messages,
-                    max_tokens=max_tokens,
-                    temperature=temperature,
-                    stream=True,
-                    repeat_penalty=repeat_penalty,
-                    top_p=top_p,
-                    top_k=top_k,
-                    seed=seed
-                ):
-                    delta = out["choices"][0]["delta"].get("content")
-                    if delta:
-                        await ws.send(json.dumps({
-                            "type": "token",
-                            "content": delta
-                        }))
+                if llm is not None:
 
-                await ws.send(json.dumps({"type": "end"}))
+                    out = llm.create_chat_completion(
+                        messages=messages,
+                        max_tokens=max_tokens,
+                        temperature=temperature,
+                        repeat_penalty=repeat_penalty,
+                        top_p=top_p,
+                        top_k=top_k,
+                        stream=False,
+                        seed=seed
+                    )
 
-            else:
-                out = llm.create_chat_completion(
-                    messages=messages,
-                    max_tokens=max_tokens,
-                    temperature=temperature,
-                    repeat_penalty=repeat_penalty,
-                    top_p=top_p,
-                    top_k=top_k,
-                    stream=False,
-                    seed=seed
-                )
+                    text = out["choices"][0]["message"]["content"]
 
-                text = out["choices"][0]["message"]["content"]
+                elif proc is not None:
+
+                    payload = {
+                        "model": "llama",
+                        "messages": messages,
+                        "temperature": temperature,
+                        "max_tokens": max_tokens,
+                        "repeat_penalty": repeat_penalty,
+                        "top_p": top_p,
+                        "top_k": top_k,
+                        "seed": seed,
+                    }
+
+                    url = f"http://127.0.0.1:{llama_port}/v1/chat/completions"
+                    res = requests.post(url, json=payload)
+                    text = res.json()["choices"][0]["message"]["content"]
+                
+                else:
+                    await ws.send(json.dumps({
+                        "type": "error",
+                        "message": "Model not loaded"
+                    }))
+                    continue
                 text_new, char_list, danmu_list = clean_response(messages[-1]["content"], text)
                 await ws.send(json.dumps({
                     "type": "result",
@@ -163,7 +205,7 @@ async def handle_ws(ws):
                     "danmu_list": danmu_list,
                     "time": time.time() - st_time
                 }))
-            
+
             if req_type == None:
                 await ws.send(json.dumps({
                     "type": "error",
@@ -189,4 +231,4 @@ if __name__ == "__main__":
     asyncio.run(main())
 
 
-# pyinstaller --onefile --noconsole --clean --exclude-module torch --exclude-module transformers --exclude-module tensorflow --exclude-module sentencepiece --exclude-module datasets --add-binary "E:\AIGC\env\llama\Lib\site-packages\llama_cpp\lib\*.dll;." llama_websocket.py
+# pyinstaller --onefile --noconsole --clean --exclude-module torch --exclude-module transformers --exclude-module tensorflow --exclude-module sentencepiece --exclude-module datasets --add-binary "E:\AIGC\env\llama\Lib\site-packages\llama_cpp\lib\*.dll;." --add-data "llama_server.py;." llama_server_websocket.py
