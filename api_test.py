@@ -160,6 +160,8 @@ async def test_ws_load_model(model_path, mmproj_path=None, n_ctx=4096, n_gpu_lay
             'use_gpu': use_gpu,
             'n_gpu_layers': n_gpu_layers,
             "n_threads": n_threads,
+            'timeout': 0,
+            'llama_port': 8849,
         }
 
         await ws.send(json.dumps(req, ensure_ascii=False))
@@ -172,7 +174,7 @@ async def test_ws_load_model(model_path, mmproj_path=None, n_ctx=4096, n_gpu_lay
             print("model_path: ", data["model_path"])
             print("模型加载成功")
 
-        elif data["type"] == "error":
+        elif data["type"] == "load_model_error":
             print("ERROR:", data["message"])
 
 async def test_ws_shutdown():
@@ -243,10 +245,10 @@ if __name__ == "__main__":
     n_gpu_layers = -1
     # asyncio.run(test_ws_load_model(model_l_path, n_ctx=n_ctx, n_gpu_layers=n_gpu_layers, n_threads=n_threads, use_gpu=True)) 
     asyncio.run(test_ws_load_model(model_l_path, mmproj_path=mmproj_path, n_ctx=n_ctx, n_gpu_layers=n_gpu_layers, n_threads=n_threads, use_gpu=False)) 
-    # asyncio.run(test_ws_no_stream(message, reply=True))
+    asyncio.run(test_ws_no_stream(message, reply=True))
     asyncio.run(test_ws_stream(message, reply=True, print_realtime=False))
     # asyncio.run(test_ws_load_model(model_l_path, mmproj_path=mmproj_path, n_ctx=n_ctx, n_gpu_layers=n_gpu_layers, n_threads=n_threads, use_gpu=False)) 
-    # asyncio.run(test_ws_no_stream(messages_img))
+    asyncio.run(test_ws_no_stream(messages_img))
     # asyncio.run(test_ws_no_stream(messages))
     # asyncio.run(test_ws_no_stream(messages_reply))
     # asyncio.run(test_ws_no_stream(messages_l))

@@ -98,8 +98,9 @@ def load_model(model_path, n_ctx, n_threads, use_gpu=False, **kwargs):
     mmproj_path = kwargs.get("mmproj_path", None)
     llama_port = kwargs.get("llama_port", 8849)
     proc = start_llama_server(model_path, llama_server_path, n_gpu_layers=n_gpu_layers, n_ctx=n_ctx, n_threads=n_threads, port=llama_port, mmproj_path=mmproj_path)
+    
+    print("[LLM] Model loading - llama server")
     time.sleep(2) # 等待异步模型加载
-    print("[LLM] Model loaded")
 
 
 # -------------------------
@@ -126,12 +127,41 @@ async def handle_ws(ws):
                 n_ctx = req.get("n_ctx", 2048)
                 n_threads = req.get("n_threads", 4)
                 use_gpu = req.get("use_gpu", False)
+                timeout = req.get("timeout", 30)
 
                 # llama_server_path = req.get("llama_server_path", "./llama/llama-server.exe")
                 n_gpu_layers = req.get("n_gpu_layers", -1)
                 llama_port = req.get("llama_port", 8849)
 
                 load_model(model_path, n_ctx, n_threads, use_gpu=use_gpu, mmproj_path=mmproj_path, n_gpu_layers=n_gpu_layers, llama_port=llama_port)
+
+                url = f"http://127.0.0.1:{llama_port}/health"
+
+                st_time = time.time()
+                while True:
+                    try:
+                        r = httpx.get(url, timeout=2)
+
+                        if r.status_code == 200:
+                            print("[LLM] Model loaded - llama-server 已启动")
+                            break
+                    except Exception:
+                        pass
+                    if time.time() - st_time > timeout:
+                        print("[LLM] Model load timeout - llama-server 启动超时")
+                        await ws.send(json.dumps({
+                            "type": "load_model_error",
+                            "model_path": model_path,
+                            "message": f"llama-server 启动超时, timeout: {timeout}s"
+                        }))
+                        proc.terminate()
+                        proc.wait()
+                        proc = None
+                        break
+
+                    print("等待 llamaserver 启动...")
+                    time.sleep(2)
+
                 await ws.send(json.dumps({
                     "type": "load_model_ok",
                     "model_path": model_path
