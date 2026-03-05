@@ -4,6 +4,7 @@ import websockets
 import base64
 from PIL import Image
 from io import BytesIO
+import time
 
 
 def encode_image(image_path, max_side=1280):
@@ -59,6 +60,92 @@ async def test_ws_no_stream(messages, reply = False):
 
         elif data["type"] == "error":
             print("ERROR:", data["message"])
+
+async def test_ws_stream(messages, reply=False, print_realtime=True):
+    uri = "ws://localhost:8848"
+
+    async with websockets.connect(uri) as ws:
+        req = {
+            "type": "infer",
+            "messages": messages,
+            "max_tokens": 512,
+            "temperature": 0.7,
+            "top_p": 0.95,
+            "top_k": 40,
+            "repeat_penalty": 1.0,
+            "seed": -1,
+            "stream": True,
+        }
+
+        await ws.send(json.dumps(req, ensure_ascii=False))
+
+        full_text = []
+        start_time = time.time()
+        first_chunk = True
+        raw_text = ""
+        while True:
+            msg = await ws.recv()
+            data = json.loads(msg)
+
+            t = data.get("type")
+
+            if t == "delta":
+                # 增量 token
+                chunk = data.get("content", "")
+                if chunk:
+
+                    if first_chunk:
+                        print(f"\n响应耗时：{time.time() - start_time:.2f} 秒")
+                        first_chunk = False
+
+                    full_text.append(chunk)
+                    
+                    if chunk == '\n':
+                        print("行输出：", raw_text)
+                        print("行清洗输出：", clean_response(raw_text, character_set, reply = reply))
+                        raw_text = ""
+                    else:
+                        raw_text += chunk
+
+                    if print_realtime:
+                        # 实时打印，不换行，刷新输出
+                        print(chunk, end="", flush=True)
+
+            elif t == "done":
+                # 流结束
+                elapsed = data.get("time", None)
+                print("行输出：", raw_text)
+                print("行清洗输出：", clean_response(raw_text, character_set, reply = reply))
+                text = "".join(full_text)
+                if print_realtime:
+                    print()  # 换行收尾
+
+                print("模型输出：")
+                print(text)
+                if elapsed is not None:
+                    print(f"\n生成耗时：{elapsed:.2f} 秒")
+
+                # 最后再统一清洗弹幕（推荐）
+                print(clean_response(text, character_set, reply=reply))
+                return
+
+            elif t == "result":
+                # 兼容：如果服务端还会发整段结果
+                text = data.get("content", "")
+                print("模型输出：")
+                print(text)
+                print(f"\n生成耗时：{data.get('time', 0):.2f} 秒")
+                print(clean_response(text, character_set, reply=reply))
+                return
+
+            elif t == "error":
+                print("ERROR:", data.get("message"))
+                return
+
+            else:
+                # 忽略未知类型，或者你也可以打印调试
+                # print("UNKNOWN:", data)
+                pass
 
 async def test_ws_load_model(model_path, mmproj_path=None, n_ctx=4096, n_gpu_layers=-1,  n_threads=4, use_gpu=False):
     uri = "ws://localhost:8848"
@@ -155,10 +242,11 @@ if __name__ == "__main__":
     n_threads = 8
     n_gpu_layers = -1
     # asyncio.run(test_ws_load_model(model_l_path, n_ctx=n_ctx, n_gpu_layers=n_gpu_layers, n_threads=n_threads, use_gpu=True)) 
-    asyncio.run(test_ws_load_model(model_l_path, mmproj_path=mmproj_path, n_ctx=n_ctx, n_gpu_layers=n_gpu_layers, n_threads=n_threads, use_gpu=True)) 
-    asyncio.run(test_ws_no_stream(message, reply=True))
     asyncio.run(test_ws_load_model(model_l_path, mmproj_path=mmproj_path, n_ctx=n_ctx, n_gpu_layers=n_gpu_layers, n_threads=n_threads, use_gpu=False)) 
-    asyncio.run(test_ws_no_stream(messages_img))
+    # asyncio.run(test_ws_no_stream(message, reply=True))
+    asyncio.run(test_ws_stream(message, reply=True, print_realtime=False))
+    # asyncio.run(test_ws_load_model(model_l_path, mmproj_path=mmproj_path, n_ctx=n_ctx, n_gpu_layers=n_gpu_layers, n_threads=n_threads, use_gpu=False)) 
+    # asyncio.run(test_ws_no_stream(messages_img))
     # asyncio.run(test_ws_no_stream(messages))
     # asyncio.run(test_ws_no_stream(messages_reply))
     # asyncio.run(test_ws_no_stream(messages_l))
@@ -170,5 +258,4 @@ if __name__ == "__main__":
     # # 终止服务测试g:\models\AndesVL\AndesVL-Qwen3-reply-smix06-lora\AndesVL-Qwen3-reply-smix06-lora-Q5_K_M.gguf
     asyncio.run(test_ws_shutdown())
 
-#     asyncio.run(test_ws())
 
