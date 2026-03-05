@@ -13,3 +13,4 @@ llama_old
 *.html
 model_download.py
 test_*
+prompt_template.py

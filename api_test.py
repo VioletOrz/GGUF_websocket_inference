@@ -1,7 +1,33 @@
 import asyncio
 import json
 import websockets
+import base64
+from PIL import Image
+from io import BytesIO
 
+
+def encode_image(image_path, max_side=1280):
+    img = Image.open(image_path)
+
+    w, h = img.size
+    longest = max(w, h)
+
+    # 如果最长边超过限制则缩放
+    if longest > max_side:
+        scale = max_side / longest
+        new_w = int(w * scale)
+        new_h = int(h * scale)
+        img = img.resize((new_w, new_h), Image.LANCZOS)
+
+    # 保存到内存
+    buffer = BytesIO()
+    img.save(buffer, format="PNG")
+    image_bytes = buffer.getvalue()
+
+    # base64
+    image_base64 = base64.b64encode(image_bytes).decode("utf-8")
+    return image_base64
+    
 async def test_ws_no_stream(messages, reply = False):
     uri = "ws://localhost:8848"
 
@@ -100,7 +126,7 @@ if __name__ == "__main__":
                 {
                     "type": "image_url",
                     "image_url": {
-                        "url": f"F:/code/llama_inf/yg.png"
+                        "url": f"data:image/png;base64,{encode_image('F:/code/llama_inf/yg.png')}"
                     },
                 },
             ],
@@ -142,7 +168,7 @@ if __name__ == "__main__":
     # asyncio.run(test_ws_load_model(model_l_path, n_ctx=n_ctx, n_gpu_layers=n_gpu_layers, n_threads=n_threads, use_gpu=True)) 
     # asyncio.run(test_ws_no_stream(messages))
     # # 终止服务测试g:\models\AndesVL\AndesVL-Qwen3-reply-smix06-lora\AndesVL-Qwen3-reply-smix06-lora-Q5_K_M.gguf
-    # asyncio.run(test_ws_shutdown())
+    asyncio.run(test_ws_shutdown())
 
 #     asyncio.run(test_ws())
 

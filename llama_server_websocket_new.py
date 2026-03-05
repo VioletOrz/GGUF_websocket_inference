@@ -166,14 +166,13 @@ async def handle_ws(ws):
             if req_type == "infer":
 
                 messages = req["messages"]
-                for msg in messages[-1]['content']:
-                    if type(msg) != dict:
-                        break
-                    if msg.get("type", None) == "image_url":
-                        url = msg["image_url"]["url"]
-                        image_base64 = encode_image(url)
-                        msg['image_url'] = {"url": f"data:image/png;base64,{image_base64}"}
-                        # messages[-1]['content'] = [{"type": "image_url", "image_url": {"url": f"data:image/png;base64,{image_base64}"}}]
+                # for msg in messages[-1]['content']:
+                #     if type(msg) != dict:
+                #         break
+                #     if msg.get("type", None) == "image_url":
+                #         url = msg["image_url"]["url"]
+                #         image_base64 = encode_image(url)
+                #         msg['image_url'] = {"url": f"data:image/png;base64,{image_base64}"}
                         
                 max_tokens = req.get("max_tokens", 512)
                 temperature = req.get("temperature", 0.7)
@@ -246,7 +245,7 @@ async def handle_ws(ws):
 # 启动 WS Server
 # -------------------------
 async def main():
-    async with websockets.serve(handle_ws, "0.0.0.0", 8848):
+    async with websockets.serve(handle_ws, "0.0.0.0", 8848, max_size=8 * 1024 * 1024):
         print("WebSocket LLaMA server running at ws://localhost:8848")
         await asyncio.Future()
 
