@@ -8,3 +8,8 @@ build
 dist
 .vscode
 llama
+llama_old
+*.png
+*.html
+model_download.py
+test_*

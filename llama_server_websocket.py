@@ -7,6 +7,17 @@ import sys
 from llama_server import start_llama_server
 import requests
 
+import base64
+
+def encode_image(image_path):
+    with open(image_path, "rb") as f:
+        image_bytes = f.read()
+    image_base64 = base64.b64encode(image_bytes).decode("utf-8")
+    return image_base64
+# with open(r"F:\code\llama_inf\yg.png", "rb") as f:
+#     img_bytes = f.read()
+
+# img_base64 = base64.b64encode(img_bytes).decode("utf-8")
 
 
 llm = None   
@@ -20,7 +31,10 @@ def clean_response(prompt, response):
     res = res.replace('>', '')
     id_danmu_list = res.split('\n')
 
-    char_text = prompt.strip().split('角色设定:\n')[1].split('OCR结果:')[0].strip().split('\n')
+    if "弹幕文本:\n" in prompt:
+        char_text = prompt.strip().split('角色设定:\n')[1].split("弹幕文本:\n")[0].strip().split('\n')
+    else:
+        char_text = prompt.strip().split('角色设定:\n')[1].split('OCR结果:')[0].strip().split('\n')
     char_list = []
 
     for char in char_text:
@@ -34,7 +48,10 @@ def clean_response(prompt, response):
         if len(id_danmu.split('：')) != 2:
             continue
         else:
-            res_char = id_danmu.split('：')[0].strip()
+            if "弹幕文本:\n" in prompt:
+                res_char = id_danmu.split('@')[0].strip()
+            else:
+                res_char = id_danmu.split('：')[0].strip()
             for char in char_list:
                 if res_char in char:
                     res = res.replace(res_char, char)
@@ -44,10 +61,18 @@ def clean_response(prompt, response):
             if res_char not in char_list:
                 continue
             res_char_list.append(res_char)
-            res_danmu_list.append(id_danmu.split('：')[1].strip())
+            if "弹幕文本:\n" in prompt:
+                res_danmu_list.append(id_danmu.split('@')[1].strip())
+            else:
+                res_danmu_list.append(id_danmu.split('：')[1].strip())
+            
     res_new = ''
     for i in range(len(res_char_list)):
-        res_new += res_char_list[i] + '：' + res_danmu_list[i] + '\n'
+        if "弹幕文本:\n" in prompt:
+            res_new += res_char_list[i] + '@' + res_danmu_list[i] + '\n'
+            res_danmu_list[i] = res_danmu_list[i].split('：')[1]
+        else:
+            res_new += res_char_list[i] + '：' + res_danmu_list[i] + '\n'
     return res_new, res_char_list, res_danmu_list
 
 
@@ -84,8 +109,9 @@ def load_model(model_path, n_ctx, n_threads, use_gpu=False, **kwargs):
         n_gpu_layers = kwargs.get("n_gpu_layers", -1)
         # n_ctx = kwargs.get("n_ctx", 2048)
         # n_threads = kwargs.get("n_threads", 4)
+        mmproj_path = kwargs.get("mmproj_path", None)
         llama_port = kwargs.get("llama_port", 8849)
-        proc = start_llama_server(model_path, llama_server_path, n_gpu_layers=n_gpu_layers, n_ctx=n_ctx, n_threads=n_threads, port=llama_port)
+        proc = start_llama_server(model_path, llama_server_path, n_gpu_layers=n_gpu_layers, n_ctx=n_ctx, n_threads=n_threads, port=llama_port, mmproj_path=mmproj_path)
         time.sleep(2) # 等待异步模型加载
         print("[LLM] Model loaded - llama server")
 
@@ -109,6 +135,7 @@ async def handle_ws(ws):
             if req_type == "load_model":
 
                 model_path = req["model_path"]
+                mmproj_path = req.get("mmproj_path", None)
                 n_ctx = req.get("n_ctx", 2048)
                 n_threads = req.get("n_threads", 4)
                 use_gpu = req.get("use_gpu", False)
@@ -117,7 +144,7 @@ async def handle_ws(ws):
                 n_gpu_layers = req.get("n_gpu_layers", -1)
                 llama_port = req.get("llama_port", 8849)
 
-                load_model(model_path, n_ctx, n_threads, use_gpu=use_gpu, llama_server_path=llama_server_path, n_gpu_layers=n_gpu_layers, llama_port=llama_port)
+                load_model(model_path, n_ctx, n_threads, use_gpu=use_gpu, llama_server_path=llama_server_path, mmproj_path=mmproj_path, n_gpu_layers=n_gpu_layers, llama_port=llama_port)
                 await ws.send(json.dumps({
                     "type": "load_model_ok",
                     "model_path": model_path
@@ -148,6 +175,13 @@ async def handle_ws(ws):
             if req_type == "infer":
 
                 messages = req["messages"]
+                for msg in messages[-1]['content']:
+                    if msg.get("type", None) == "image_url":
+                        url = msg["image_url"]["url"]
+                        image_base64 = encode_image(url)
+                        msg['image_url'] = {"url": f"data:image/png;base64,{image_base64}"}
+                        # messages[-1]['content'] = [{"type": "image_url", "image_url": {"url": f"data:image/png;base64,{image_base64}"}}]
+                        
                 max_tokens = req.get("max_tokens", 512)
                 temperature = req.get("temperature", 0.7)
                 repeat_penalty = req.get("repeat_penalty", 1.0)
@@ -196,15 +230,27 @@ async def handle_ws(ws):
                         "message": "Model not loaded"
                     }))
                     continue
-                text_new, char_list, danmu_list = clean_response(messages[-1]["content"], text)
-                await ws.send(json.dumps({
-                    "type": "result",
-                    "content": text,
-                    'content_clean': text_new,
-                    "char_list": char_list,
-                    "danmu_list": danmu_list,
-                    "time": time.time() - st_time
-                }))
+                try:
+                    print("[LLM] Response: ", text)
+                    try:
+                        text_new, char_list, danmu_list = clean_response(messages[-1]["content"], text)
+                    except Exception as e:
+                        print(e)
+                        text_new, char_list, danmu_list = text, [], []
+
+                    await ws.send(json.dumps({
+                        "type": "result",
+                        "content": text,
+                        'content_clean': text_new,
+                        "char_list": char_list,
+                        "danmu_list": danmu_list,
+                        "time": time.time() - st_time
+                    }))
+                except Exception as e:
+                    await ws.send(json.dumps({
+                        "type": "error",
+                        "message": "response解析错误: "+ str(e)
+                    }))
 
             if req_type == None:
                 await ws.send(json.dumps({

@@ -2,7 +2,7 @@ import subprocess
 import os
 import threading
 
-def start_llama_server(model_path, llama_server_path, mmproj_path=None, n_gpu_layers=-1, n_ctx=4096, n_threads=4, port=8848,):
+def start_llama_server(model_path, llama_server_path, mmproj_path=None,   n_gpu_layers=-1, n_ctx=4096, n_threads=4, port=8848,):
     env = os.environ.copy()
     env["CUDA_VISIBLE_DEVICES"] = "0"
 
@@ -28,38 +28,17 @@ def start_llama_server(model_path, llama_server_path, mmproj_path=None, n_gpu_la
 
     CREATE_NO_WINDOW = 0x08000000
 
-    debug = False
-
-    if debug:
-        proc = subprocess.Popen(
-            cmd,
-            env=env,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            # stdout=subprocess.DEVNULL,
-            # stderr=subprocess.DEVNULL,
-            # creationflags=CREATE_NO_WINDOW,
-            text=True,
-            bufsize=1
-        )
-        def log_reader():
-            for line in proc.stdout:
-                print("[llama]", line.rstrip())
-
-        threading.Thread(target=log_reader, daemon=True).start()
-
-    else:
-        proc = subprocess.Popen(
-            cmd,
-            env=env,
-            # stdout=subprocess.PIPE,
-            # stderr=subprocess.STDOUT,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            creationflags=CREATE_NO_WINDOW,
-            text=True,
-            bufsize=1
-        )
+    proc = subprocess.Popen(
+        cmd,
+        env=env,
+        # stdout=subprocess.PIPE,
+        # stderr=subprocess.STDOUT,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        creationflags=CREATE_NO_WINDOW,
+        text=True,
+        bufsize=1
+    )
 
     return proc
 

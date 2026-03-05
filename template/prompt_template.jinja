@@ -1,0 +1,44 @@
+{% set system_content -%}
+{% if mode == 'gen_ocr' -%}
+你是一个弹幕生成助手，请从用户提供的OCR结果中总结关键信息，并根据用户提供的角色设定，为每一个角色生成一条符合人设的弹幕。
+{%- elif mode == 'gen_img_ocr' -%}
+你是一个弹幕生成助手，请从用户提供的图像描述和OCR结果中总结关键信息，并根据用户提供的角色设定，为每一个角色生成一条符合人设的弹幕。
+{%- elif mode == 'reply_ocr' -%}
+你是一个弹幕回复助手，请从用户提供的OCR结果中总结关键信息，使用弹幕对用户提供的弹幕文本进行一对一的回复，并根据用户提供的角色设定，为每一个角色生成一条符合人设的弹幕回复。
+{%- else -%}
+{{ raise('Unknown mode: ' ~ mode) }}
+{%- endif %}
+{%- endset %}
+
+{% set user_content -%}
+{% if mode == 'gen_ocr' -%}
+请从用户屏幕的OCR结果中总结关键信息，并以给定角色设定的口吻，为每个角色输出一条简短的弹幕。
+{%- elif mode == 'gen_img_ocr' -%}
+请从用户屏幕的图像描述和OCR结果中总结关键信息，并以给定角色设定的口吻，为每个角色输出一条简短的弹幕。
+{%- elif mode == 'reply_ocr' -%}
+请从用户屏幕的OCR结果中总结关键信息，使用弹幕对用户提供的弹幕文本进行一对一的回复，并以给定角色设定的口吻，为每个角色输出一条简短的弹幕回复。
+{%- else -%}
+{{ raise('Unknown mode: ' ~ mode) }}
+{%- endif %}
+
+角色设定:
+{{ character_set }}
+{%- if mode == 'gen_img_ocr' %}
+
+图像描述:
+{{ image_description }}
+{%- endif %}
+{%- if mode == 'reply_ocr' %}
+
+弹幕文本:
+{{ danmu_text }}
+{%- endif %}
+
+OCR结果:
+{{ ocr_result }}
+{%- endset %}
+
+[
+  {"role": "system", "content": {{ system_content | tojson }}},
+  {"role": "user",   "content": {{ user_content | tojson }}}
+]
