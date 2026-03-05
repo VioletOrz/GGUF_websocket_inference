@@ -258,6 +258,6 @@ if __name__ == "__main__":
     # asyncio.run(test_ws_load_model(model_l_path, n_ctx=n_ctx, n_gpu_layers=n_gpu_layers, n_threads=n_threads, use_gpu=True)) 
     # asyncio.run(test_ws_no_stream(messages))
     # # 终止服务测试g:\models\AndesVL\AndesVL-Qwen3-reply-smix06-lora\AndesVL-Qwen3-reply-smix06-lora-Q5_K_M.gguf
-    asyncio.run(test_ws_shutdown())
+    # asyncio.run(test_ws_shutdown())
 
 

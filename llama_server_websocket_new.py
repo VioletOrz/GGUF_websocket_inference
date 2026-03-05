@@ -108,7 +108,7 @@ def load_model(model_path, n_ctx, n_threads, use_gpu=False, **kwargs):
 # -------------------------
 async def handle_ws(ws):
 
-    # global proc
+    global proc
     # proc = None
     # use_gpu = None
     # llama_port = None
@@ -147,7 +147,8 @@ async def handle_ws(ws):
                             break
                     except Exception:
                         pass
-                    if time.time() - st_time > timeout:
+
+                    if (time.time() - st_time) > timeout:
                         print("[LLM] Model load timeout - llama-server 启动超时")
                         await ws.send(json.dumps({
                             "type": "load_model_error",
